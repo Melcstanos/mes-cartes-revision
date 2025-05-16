@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiniCartes</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      background: #f9f9f9;
+    }
+    h1 {
+      text-align: center;
+    }
+    .hidden {
+      display: none;
+    }
+    .section {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    button, textarea {
+      width: 100%;
+      padding: 10px;
+      font-size: 1em;
+      margin: 10px 0;
+    }
+    .card {
+      border: 1px solid #ccc;
+      padding: 30px;
+      margin: 20px auto;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .recto {
+      background-color: white;
+    }
+    .verso {
+      background-color: #fff3b0;
+    }
+    .nav-btns {
+      text-align: center;
+    }
+    .nav-btns button {
+      width: auto;
+      margin: 0 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>MiniCartes</h1>
+
+  <!-- Accueil -->
+  <div id="home" class="section">
+    <button onclick="showSection('create')">📝 Créer des fiches</button>
+    <button onclick="showSection('review')">📚 Réviser mes fiches</button>
+  </div>
+
+  <!-- Création -->
+  <div id="create" class="section hidden">
+    <textarea id="question" placeholder="Question / Recto"></textarea>
+    <textarea id="answer" placeholder="Réponse / Verso"></textarea>
+    <button onclick="addCard()">Ajouter la fiche</button>
+    <button onclick="showSection('home')">⬅️ Retour à l'accueil</button>
+  </div>
+
+  <!-- Révision -->
+  <div id="review" class="section hidden">
+    <div id="card" class="card recto" onclick="flipCard()">
+      Cliquez pour afficher la fiche
+    </div>
+    <div class="nav-btns">
+      <button onclick="prevCard()">◀️ Précédente</button>
+      <button onclick="nextCard()">Suivante ▶️</button>
+    </div>
+    <button onclick="showSection('home')">⬅️ Retour à l'accueil</button>
+  </div>
+
+  <script>
+    var cards = JSON.parse(localStorage.getItem('minicartes')) || [];
+    var current = 0;
+    var showingAnswer = false;
+
+    function showSection(id) {
+      document.getElementById('home').classList.add('hidden');
+      document.getElementById('create').classList.add('hidden');
+      document.getElementById('review').classList.add('hidden');
+      document.getElementById(id).classList.remove('hidden');
+
+      if (id === 'review') {
+        current = 0;
+        showingAnswer = false;
+        showCard();
+      }
+    }
+
+    function saveCards() {
+      localStorage.setItem('minicartes', JSON.stringify(cards));
+    }
+
+    function addCard() {
+      var q = document.getElementById('question').value.trim();
+      var a = document.getElementById('answer').value.trim();
+      if (q && a) {
+        cards.push({ question: q, answer: a });
+        saveCards();
+        document.getElementById('question').value = '';
+        document.getElementById('answer').value = '';
+        alert("Fiche ajoutée !");
+      }
+    }
+
+    function showCard() {
+      var card = document.getElementById('card');
+      if (cards.length === 0) {
+        card.textContent = "Aucune fiche disponible.";
+        card.className = "card recto";
+        return;
+      }
+      var data = cards[current];
+      card.textContent = showingAnswer ? data.answer : data.question;
+      card.className = showingAnswer ? "card verso" : "card recto";
+    }
+
+    function flipCard() {
+      if (cards.length === 0) return;
+      showingAnswer = !showingAnswer;
+      showCard();
+    }
+
+    function nextCard() {
+      if (cards.length === 0) return;
+      current = (current + 1) % cards.length;
+      showingAnswer = false;
+      showCard();
+    }
+
+    function prevCard() {
+      if (cards.length === 0) return;
+      current = (current - 1 + cards.length) % cards.length;
+      showingAnswer = false;
+      showCard();
+    }
+
+    // Démarrage
+    showSection('home');
+  </script>
+</body>
+</html>
