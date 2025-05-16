@@ -1,155 +1,205 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MiniCartes</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cartes Révision+</title>
   <style>
+    :root {
+      --bg: #f9f9f9;
+      --text: #000;
+      --card-front: #ffffff;
+      --card-back: #fff3b0;
+    }
+    [data-theme="dark"] {
+      --bg: #1e1e1e;
+      --text: #f5f5f5;
+      --card-front: #2c2c2c;
+      --card-back: #4c4c1f;
+    }
     body {
+      margin: 0; padding: 20px;
       font-family: sans-serif;
-      margin: 20px;
-      background: #f9f9f9;
+      background-color: var(--bg);
+      color: var(--text);
     }
-    h1 {
-      text-align: center;
-    }
-    .hidden {
-      display: none;
-    }
-    .section {
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    button, textarea {
-      width: 100%;
-      padding: 10px;
-      font-size: 1em;
-      margin: 10px 0;
+    .hidden { display: none; }
+    .section { max-width: 600px; margin: auto; }
+    textarea, input, select, button {
+      width: 100%; margin: 8px 0; padding: 10px; font-size: 1em;
     }
     .card {
-      border: 1px solid #ccc;
-      padding: 30px;
-      margin: 20px auto;
-      width: 100%;
-      max-width: 400px;
-      text-align: center;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
+      border: 1px solid #ccc; padding: 30px;
+      margin: 20px auto; text-align: center;
+      cursor: pointer; transition: background-color 0.3s;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      max-width: 400px;
     }
-    .recto {
-      background-color: white;
-    }
-    .verso {
-      background-color: #fff3b0;
-    }
-    .nav-btns {
-      text-align: center;
-    }
-    .nav-btns button {
-      width: auto;
-      margin: 0 10px;
-    }
+    .recto { background: var(--card-front); }
+    .verso { background: var(--card-back); }
+    .nav-btns { text-align: center; margin-top: 10px; }
+    .nav-btns button { margin: 0 10px; }
+    .row { display: flex; justify-content: space-between; gap: 10px; }
   </style>
 </head>
 <body>
-
-  <h1>MiniCartes</h1>
-
-  <!-- Accueil -->
-  <div id="home" class="section">
-    <button onclick="showSection('create')">📝 Créer des fiches</button>
-    <button onclick="showSection('review')">📚 Réviser mes fiches</button>
+  <div class="section" id="home">
+    <h1>Cartes Révision+</h1>
+    <button onclick="show('create')">Créer une fiche</button>
+    <button onclick="show('review')">Réviser</button>
+    <button onclick="downloadJSON()">⬇️ Export JSON</button>
+    <button onclick="toggleTheme()">🌓 Mode sombre</button>
   </div>
 
-  <!-- Création -->
-  <div id="create" class="section hidden">
-    <textarea id="question" placeholder="Question / Recto"></textarea>
-    <textarea id="answer" placeholder="Réponse / Verso"></textarea>
-    <button onclick="addCard()">Ajouter la fiche</button>
-    <button onclick="showSection('home')">⬅️ Retour à l'accueil</button>
+  <div class="section hidden" id="create">
+    <input id="theme" placeholder="Thème (optionnel)">
+    <textarea id="question" placeholder="Question"></textarea>
+    <textarea id="answer" placeholder="Réponse"></textarea>
+    <button onclick="addCard()">Ajouter</button>
+    <button onclick="show('home')">⬅️ Retour</button>
   </div>
 
-  <!-- Révision -->
-  <div id="review" class="section hidden">
-    <div id="card" class="card recto" onclick="flipCard()">
-      Cliquez pour afficher la fiche
-    </div>
+  <div class="section hidden" id="review">
+    <select id="filterTheme" onchange="filterByTheme()">
+      <option value="">Tous les thèmes</option>
+    </select>
+    <div id="card" class="card recto" onclick="flipCard()">Cliquez pour afficher la fiche</div>
     <div class="nav-btns">
       <button onclick="prevCard()">◀️ Précédente</button>
       <button onclick="nextCard()">Suivante ▶️</button>
     </div>
-    <button onclick="showSection('home')">⬅️ Retour à l'accueil</button>
+    <div class="nav-btns">
+      <button onclick="gradeCard(1)">🟥 Difficile</button>
+      <button onclick="gradeCard(3)">🟨 Moyen</button>
+      <button onclick="gradeCard(7)">🟩 Facile</button>
+    </div>
+    <button onclick="deleteCard()">🗑️ Supprimer la fiche</button>
+    <button onclick="show('home')">⬅️ Retour</button>
   </div>
 
   <script>
-    var cards = JSON.parse(localStorage.getItem('minicartes')) || [];
-    var current = 0;
-    var showingAnswer = false;
-
-    function showSection(id) {
-      document.getElementById('home').classList.add('hidden');
-      document.getElementById('create').classList.add('hidden');
-      document.getElementById('review').classList.add('hidden');
-      document.getElementById(id).classList.remove('hidden');
-
-      if (id === 'review') {
-        current = 0;
-        showingAnswer = false;
-        showCard();
-      }
-    }
+    let cards = JSON.parse(localStorage.getItem('cards') || '[]');
+    let currentIndex = 0;
+    let showingAnswer = false;
+    let filteredCards = [];
 
     function saveCards() {
-      localStorage.setItem('minicartes', JSON.stringify(cards));
+      localStorage.setItem('cards', JSON.stringify(cards));
     }
 
     function addCard() {
-      var q = document.getElementById('question').value.trim();
-      var a = document.getElementById('answer').value.trim();
-      if (q && a) {
-        cards.push({ question: q, answer: a });
-        saveCards();
-        document.getElementById('question').value = '';
-        document.getElementById('answer').value = '';
-        alert("Fiche ajoutée !");
-      }
+      const question = document.getElementById('question').value.trim();
+      const answer = document.getElementById('answer').value.trim();
+      const theme = document.getElementById('theme').value.trim();
+      if (!question || !answer) return;
+      cards.push({ question, answer, theme, interval: 1, nextReview: new Date().toISOString() });
+      saveCards();
+      alert("Fiche ajoutée !");
+      show('home');
+    }
+
+    function show(section) {
+      document.querySelectorAll('.section').forEach(el => el.classList.add('hidden'));
+      document.getElementById(section).classList.remove('hidden');
+      if (section === 'review') setupReview();
+    }
+
+    function setupReview() {
+      const today = new Date().toISOString();
+      filteredCards = cards.filter(c => new Date(c.nextReview) <= today);
+      if (document.getElementById('filterTheme').value)
+        filteredCards = filteredCards.filter(c => c.theme === document.getElementById('filterTheme').value);
+      shuffle(filteredCards);
+      currentIndex = 0;
+      showingAnswer = false;
+      updateThemeOptions();
+      showCard();
     }
 
     function showCard() {
-      var card = document.getElementById('card');
-      if (cards.length === 0) {
-        card.textContent = "Aucune fiche disponible.";
-        card.className = "card recto";
+      const cardEl = document.getElementById('card');
+      if (!filteredCards.length) {
+        cardEl.textContent = "Aucune carte à réviser !";
+        cardEl.className = "card recto";
         return;
       }
-      var data = cards[current];
-      card.textContent = showingAnswer ? data.answer : data.question;
-      card.className = showingAnswer ? "card verso" : "card recto";
+      const card = filteredCards[currentIndex];
+      cardEl.textContent = showingAnswer ? card.answer : card.question;
+      cardEl.className = showingAnswer ? "card verso" : "card recto";
     }
 
     function flipCard() {
-      if (cards.length === 0) return;
+      if (!filteredCards.length) return;
       showingAnswer = !showingAnswer;
       showCard();
     }
 
     function nextCard() {
-      if (cards.length === 0) return;
-      current = (current + 1) % cards.length;
+      if (!filteredCards.length) return;
+      currentIndex = (currentIndex + 1) % filteredCards.length;
       showingAnswer = false;
       showCard();
     }
 
     function prevCard() {
-      if (cards.length === 0) return;
-      current = (current - 1 + cards.length) % cards.length;
+      if (!filteredCards.length) return;
+      currentIndex = (currentIndex - 1 + filteredCards.length) % filteredCards.length;
       showingAnswer = false;
       showCard();
     }
 
-    // Démarrage
-    showSection('home');
+    function deleteCard() {
+      if (!filteredCards.length) return;
+      const index = cards.findIndex(c => c.question === filteredCards[currentIndex].question);
+      if (index !== -1) cards.splice(index, 1);
+      saveCards();
+      setupReview();
+    }
+
+    function gradeCard(factor) {
+      if (!filteredCards.length) return;
+      const card = filteredCards[currentIndex];
+      card.interval = Math.max(card.interval * factor / 2, 1);
+      const next = new Date();
+      next.setDate(next.getDate() + Math.round(card.interval));
+      card.nextReview = next.toISOString();
+      const index = cards.findIndex(c => c.question === card.question);
+      cards[index] = card;
+      saveCards();
+      setupReview();
+    }
+
+    function updateThemeOptions() {
+      const select = document.getElementById('filterTheme');
+      const themes = [...new Set(cards.map(c => c.theme).filter(Boolean))];
+      select.innerHTML = '<option value="">Tous les thèmes</option>' +
+        themes.map(t => `<option value="${t}">${t}</option>`).join('');
+    }
+
+    function filterByTheme() {
+      setupReview();
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    function downloadJSON() {
+      const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'cartes_revision.json';
+      a.click();
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme');
+      document.documentElement.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
+    }
   </script>
 </body>
 </html>
+
