@@ -48,7 +48,9 @@
     <button onclick="show('create')">Créer une fiche</button>
     <button onclick="show('review')">Réviser</button>
     <button onclick="downloadJSON()">⬇️ Export JSON</button>
+    <button onclick="uploadJSON()">📥 Import JSON</button>
     <button onclick="toggleTheme()">🌓 Mode sombre</button>
+    <input type="file" id="fileInput" class="hidden" accept="application/json">
   </div>
 
   <div class="section hidden" id="create">
@@ -92,7 +94,9 @@
       const answer = document.getElementById('answer').value.trim();
       const theme = document.getElementById('theme').value.trim();
       if (!question || !answer) return;
-      cards.push({ question, answer, theme, interval: 1, nextReview: new Date().toISOString() });
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - 5);
+      cards.push({ question, answer, theme, interval: 1, nextReview: now.toISOString() });
       saveCards();
       alert("Fiche ajoutée !");
       show('home');
@@ -195,6 +199,31 @@
       a.click();
     }
 
+    function uploadJSON() {
+      document.getElementById('fileInput').click();
+    }
+
+    document.getElementById('fileInput').addEventListener('change', function(evt) {
+      const file = evt.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            cards = imported;
+            saveCards();
+            alert('Import réussi !');
+          } else {
+            alert('Format de fichier invalide.');
+          }
+        } catch {
+          alert('Erreur lors de l'import.');
+        }
+      };
+      reader.readAsText(file);
+    });
+
     function toggleTheme() {
       const current = document.documentElement.getAttribute('data-theme');
       document.documentElement.setAttribute('data-theme', current === 'dark' ? 'light' : 'dark');
@@ -202,4 +231,3 @@
   </script>
 </body>
 </html>
-
