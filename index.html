@@ -1,1 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartes Révision+</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 20px; background: #f9f9f9; color: #333; }
+    .section { max-width: 600px; margin: auto; display: none; }
+    .visible { display: block; }
+    textarea, input, select, button { width: 100%; padding: 10px; margin: 5px 0; }
+    .card { border: 1px solid #ccc; padding: 20px; margin: 10px auto; text-align: center; cursor: pointer; }
+    .recto { background: #ffffff; }
+    .verso { background: #fff3b0; }
+  </style>
+</head>
+<body>
+
+<div class="section visible" id="home">
+  <h1>Cartes Révision+</h1>
+  <button onclick="switchSection('create')">Créer une fiche</button>
+  <button onclick="switchSection('review')">Réviser</button>
+  <button onclick="exportData()">💾 Export chiffré (.json)</button>
+  <button onclick="document.getElementById('importFile').click()">📥 Import</button>
+  <input type="file" id="importFile" style="display:none" onchange="importData(event)">
+</div>
+
+<div class="section" id="create">
+  <select id="selectTheme"></select>
+  <input id="theme" placeholder="Ou entrez un nouveau thème">
+  <textarea id="question" placeholder="Question"></textarea>
+  <textarea id="answer" placeholder="Réponse"></textarea>
+  <button onclick="addCard()">Ajouter</button>
+  <button onclick="switchSection('home')">⬅️ Retour</button>
+</div>
+
+<div class="section" id="review">
+  <select id="themeFilter" onchange="setupReview()"></select>
+  <div id="reviewCard" class="card recto" onclick="flipCard()">Cliquez pour afficher</div>
+  <div>
+    <button onclick="prevCard()">◀️</button>
+    <button onclick="nextCard()">▶️</button>
+    <button onclick="gradeCard(1)">🟥</button>
+    <button onclick="gradeCard(3)">🟨</button>
+    <button onclick="gradeCard(7)">🟩</button>
+    <button onclick="deleteCard()">🗑️ Supprimer cette fiche</button>
+  </div>
+  <button onclick="switchSection('home')">⬅️ Retour</button>
+</div>
+
+<script>
+let cards = [];
+let filtered = [];
+let current = 0;
+let showingAnswer = false;
+
+window.addEventListener("DOMContentLoaded", () => {
+  const saved = localStorage.getItem('cards');
+  if (saved) {
+    try { cards = JSON.parse(saved); } catch { cards = []; }
+  }
+  updateThemeLists();
+  setTimeout(alertReviewSummary, 300);
+});
+
+function alertReviewSummary() {
+  const now = new Date();
+  const today = cards.filter(c => new Date(c.nextReview) <= now);
+  if (!today.length) return;
+  const stats = {};
+  today.forEach(c => {
+    const theme = c.theme || 'Sans thème';
+    stats[theme] = (stats[theme] || 0) + 1;
+  });
+  let msg = "📌 À réviser aujourd’hui :\n";
+  for (let [theme, count] of Object.entries(stats)) {
+    msg += `- ${count} dans « ${theme} »\n`;
+  }
+  alert(msg);
+}
+
+function switchSection(id) {
+  document.querySelectorAll('.section').forEach(sec => sec.classList.remove('visible'));
+  document.getElementById(id).classList.add('visible');
+  if (id === 'review') setupReview();
+}
+
+function addCard() {
+  const question = document.getElementById('question').value.trim();
+  const answer = document.getElementById('answer').value.trim();
+  let theme = document.getElementById('theme').value.trim() || document.getElementById('selectTheme').value;
+  if (!question || !answer) return;
+  const now = new Date(); now.setMinutes(now.getMinutes() - 5);
+  cards.push({ question, answer, theme, interval: 1, nextReview: now.toISOString() });
+  saveCards();
+  updateThemeLists();
+  alert("Fiche ajoutée !");
+  switchSection('home');
+}
+
+function saveCards() {
+  localStorage.setItem('cards', JSON.stringify(cards));
+}
+
+function exportData() {
+  const pass = prompt("Mot de passe pour chiffrer :");
+  if (!pass) return;
+  const data = CryptoJS.AES.encrypt(JSON.stringify(cards), pass).toString();
+  const blob = new Blob([data], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "cartes_chiffrees.json";
+  a.click();
+}
+
+function importData(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const pass = prompt("Mot de passe de déchiffrement :");
+    try {
+      const decrypted = CryptoJS.AES.decrypt(reader.result, pass).toString(CryptoJS.enc.Utf8);
+      cards = JSON.parse(decrypted);
+      saveCards();
+      updateThemeLists();
+      alert("Import réussi !");
+      alertReviewSummary();
+    } catch {
+      alert("Échec du déchiffrement ou format invalide.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function updateThemeLists() {
+  const themes = [...new Set(cards.map(c => c.theme).filter(Boolean))].sort();
+  document.getElementById('selectTheme').innerHTML = '<option value="">-- Thèmes existants --</option>' +
+    themes.map(t => `<option value="${t}">${t}</option>`).join('');
+  document.getElementById('themeFilter').innerHTML = '<option value="">Tous les thèmes</option>' +
+    themes.map(t => `<option value="${t}">${t}</option>`).join('');
+}
+
+function setupReview() {
+  const theme = document.getElementById('themeFilter').value;
+  const now = new Date();
+  filtered = cards.filter(c => new Date(c.nextReview) <= now && (!theme || c.theme === theme));
+  shuffle(filtered);
+  current = 0; showingAnswer = false;
+  showCard();
+}
+
+function showCard() {
+  const el = document.getElementById('reviewCard');
+  if (!filtered.length) {
+    el.textContent = "Aucune carte à réviser !";
+    el.className = "card recto";
+    return;
+  }
+  const card = filtered[current];
+  el.textContent = showingAnswer ? card.answer : card.question;
+  el.className = showingAnswer ? "card verso" : "card recto";
+}
+
+function flipCard() {
+  if (!filtered.length) return;
+  showingAnswer = !showingAnswer;
+  showCard();
+}
+
+function prevCard() {
+  if (!filtered.length) return;
+  current = (current - 1 + filtered.length) % filtered.length;
+  showingAnswer = false;
+  showCard();
+}
+
+function nextCard() {
+  if (!filtered.length) return;
+  current = (current + 1) % filtered.length;
+  showingAnswer = false;
+  showCard();
+}
+
+function gradeCard(factor) {
+  if (!filtered.length) return;
+  const card = filtered[current];
+  card.interval = Math.max(card.interval * factor / 2, 1);
+  const next = new Date();
+  next.setDate(next.getDate() + Math.round(card.interval));
+  card.nextReview = next.toISOString();
+  saveCards();
+  setupReview();
+}
+
+function deleteCard() {
+  if (!filtered.length) return;
+  const q = filtered[current].question;
+  cards = cards.filter(c => c.question !== q);
+  saveCards();
+  setupReview();
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+</script>
+
+</body>
+</html>
 
